@@ -1,0 +1,6 @@
+# Contains AnyDesk private keys, certs, and license data captured at reset time
+backup/
+
+# OS cruft
+Thumbs.db
+.DS_Store
