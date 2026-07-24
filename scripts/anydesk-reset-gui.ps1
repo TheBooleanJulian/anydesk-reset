@@ -17,7 +17,7 @@ if (-not (Test-IsAdmin)) {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$BackupRoot = Join-Path $PSScriptRoot 'backup'
+$BackupRoot = Join-Path (Split-Path $PSScriptRoot -Parent) 'backup'
 
 # ---- Theme ------------------------------------------------------------------
 $colorBg     = [System.Drawing.Color]::FromArgb(24, 26, 27)
@@ -68,6 +68,9 @@ $cmbBackups.DropDownStyle = 'DropDownList'
 $cmbBackups.Location = New-Object System.Drawing.Point(100, 72)
 $cmbBackups.Width = 320
 $cmbBackups.Anchor = 'Top,Left,Right'
+$cmbBackups.FlatStyle = 'Flat'
+$cmbBackups.BackColor = $colorPanel
+$cmbBackups.ForeColor = $colorText
 $form.Controls.Add($cmbBackups)
 
 $btnRefresh = New-Object System.Windows.Forms.Button
@@ -76,6 +79,9 @@ $btnRefresh.Location = New-Object System.Drawing.Point(428, 71)
 $btnRefresh.Width = 100
 $btnRefresh.Anchor = 'Top,Right'
 $btnRefresh.FlatStyle = 'Flat'
+$btnRefresh.FlatAppearance.BorderColor = $colorMuted
+$btnRefresh.BackColor = $colorPanel
+$btnRefresh.ForeColor = $colorText
 $form.Controls.Add($btnRefresh)
 
 function Update-BackupList {
@@ -88,7 +94,7 @@ function Update-BackupList {
 # ---- Log box ------------------------------------------------------------------
 $logBox = New-Object System.Windows.Forms.RichTextBox
 $logBox.Location = New-Object System.Drawing.Point(18, 108)
-$logBox.Size = New-Object System.Drawing.Size(510, 240)
+$logBox.Size = New-Object System.Drawing.Size(510, 210)
 $logBox.Anchor = 'Top,Bottom,Left,Right'
 $logBox.BackColor = $colorPanel
 $logBox.ForeColor = $colorText
@@ -114,6 +120,7 @@ $btnReset.Location = New-Object System.Drawing.Point(18, 362)
 $btnReset.Size = New-Object System.Drawing.Size(150, 34)
 $btnReset.Anchor = 'Bottom,Left'
 $btnReset.FlatStyle = 'Flat'
+$btnReset.FlatAppearance.BorderColor = $colorAccent
 $btnReset.BackColor = $colorAccent
 $btnReset.ForeColor = [System.Drawing.Color]::Black
 $form.Controls.Add($btnReset)
@@ -124,6 +131,9 @@ $btnBackup.Location = New-Object System.Drawing.Point(178, 362)
 $btnBackup.Size = New-Object System.Drawing.Size(150, 34)
 $btnBackup.Anchor = 'Bottom,Left'
 $btnBackup.FlatStyle = 'Flat'
+$btnBackup.FlatAppearance.BorderColor = $colorMuted
+$btnBackup.BackColor = $colorPanel
+$btnBackup.ForeColor = $colorText
 $form.Controls.Add($btnBackup)
 
 $btnRestore = New-Object System.Windows.Forms.Button
@@ -132,6 +142,9 @@ $btnRestore.Location = New-Object System.Drawing.Point(338, 362)
 $btnRestore.Size = New-Object System.Drawing.Size(190, 34)
 $btnRestore.Anchor = 'Bottom,Right'
 $btnRestore.FlatStyle = 'Flat'
+$btnRestore.FlatAppearance.BorderColor = $colorMuted
+$btnRestore.BackColor = $colorPanel
+$btnRestore.ForeColor = $colorText
 $form.Controls.Add($btnRestore)
 
 $allButtons = @($btnReset, $btnBackup, $btnRestore, $btnRefresh, $cmbBackups)
@@ -249,6 +262,36 @@ $btnReset.Add_Click({
         Set-ButtonsEnabled $true
     }
 })
+
+# ---- Hints ----------------------------------------------------------------------
+$hint = New-Object System.Windows.Forms.Label
+$hint.Text = " "
+$hint.ForeColor = $colorAccent
+$hint.AutoSize = $false
+$hint.Location = New-Object System.Drawing.Point(18, 326)
+$hint.Size = New-Object System.Drawing.Size(510, 18)
+$hint.Anchor = 'Bottom,Left,Right'
+$form.Controls.Add($hint)
+
+$toolTip = New-Object System.Windows.Forms.ToolTip
+$toolTip.BackColor = $colorPanel
+$toolTip.ForeColor = $colorText
+$toolTip.AutoPopDelay = 8000
+$toolTip.InitialDelay = 400
+$toolTip.ReshowDelay = 200
+
+$hints = @{
+    $cmbBackups = 'Pick which saved backup to restore'
+    $btnRefresh = 'Reload the list of available backups'
+    $btnReset   = 'Recommended: backs up, wipes, and re-registers AnyDesk with a new ID'
+    $btnBackup  = 'Save the current address book and password without resetting anything'
+    $btnRestore = 'Reapply the selected backup to the current AnyDesk install'
+}
+foreach ($control in $hints.Keys) {
+    $toolTip.SetToolTip($control, $hints[$control])
+    $control.Add_MouseEnter({ $hint.Text = $hints[$this] })
+    $control.Add_MouseLeave({ $hint.Text = " " })
+}
 
 Update-BackupList
 [System.Windows.Forms.Application]::Run($form)

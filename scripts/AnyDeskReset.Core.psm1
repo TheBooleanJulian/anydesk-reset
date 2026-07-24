@@ -36,11 +36,19 @@ function Get-ConfHashtable {
     param([string]$Path)
     $table = @{}
     if (Test-Path $Path) {
-        foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
-            $idx = $line.IndexOf('=')
-            if ($idx -gt 0) {
-                $table[$line.Substring(0, $idx)] = $line.Substring($idx + 1)
+        # AnyDesk holds these files open while it's running, so read with a
+        # sharing mode that tolerates a concurrent writer instead of failing.
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $reader = New-Object System.IO.StreamReader($stream)
+            foreach ($line in ($reader.ReadToEnd() -split "`r?`n")) {
+                $idx = $line.IndexOf('=')
+                if ($idx -gt 0) {
+                    $table[$line.Substring(0, $idx)] = $line.Substring($idx + 1)
+                }
             }
+        } finally {
+            $stream.Dispose()
         }
     }
     return $table
@@ -137,8 +145,12 @@ function Start-AnyDeskAndWaitForId {
         if ($OnTick) { & $OnTick }
         Start-Sleep -Milliseconds 250
         if ((Test-Path $script:UserConfPath) -and (Test-Path $script:SystemConfPath)) {
-            $sysConf = Get-ConfHashtable -Path $script:SystemConfPath
-            if ($sysConf['ad.anynet.id']) { $ready = $true; $id = $sysConf['ad.anynet.id']; break }
+            try {
+                $sysConf = Get-ConfHashtable -Path $script:SystemConfPath
+                if ($sysConf['ad.anynet.id']) { $ready = $true; $id = $sysConf['ad.anynet.id']; break }
+            } catch [System.IO.IOException] {
+                # AnyDesk is mid-write to system.conf - try again next tick.
+            }
         }
     }
 

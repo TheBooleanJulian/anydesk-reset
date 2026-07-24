@@ -101,7 +101,7 @@ $backupResult = $null
 Write-Host ("[2/{0}] " -f $TotalSteps) -ForegroundColor DarkCyan -NoNewline
 Write-Host "Backing up address book... " -ForegroundColor White -NoNewline
 try {
-    $backupResult = Backup-AnyDeskConfig -BackupRoot (Join-Path $PSScriptRoot 'backup')
+    $backupResult = Backup-AnyDeskConfig -BackupRoot (Join-Path (Split-Path $PSScriptRoot -Parent) 'backup')
 
     Write-Host "OK" -ForegroundColor Green
     if ($backupResult.Found.Count -gt 0) {

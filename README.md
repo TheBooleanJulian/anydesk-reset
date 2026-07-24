@@ -7,6 +7,8 @@
 ![PowerShell](https://img.shields.io/badge/-PowerShell-5391FE?logo=powershell&logoColor=white)
 ![License](https://img.shields.io/badge/license-AGPLv3%20%7C%20Commercial-00D4C8.svg)
 
+![anydesk-reset](assets/hero.png)
+
 </div>
 
 ---
@@ -35,29 +37,23 @@ AnyDesk ties its client identity to locally stored configuration files. This uti
 ## Quick Start
 
 1. Close AnyDesk completely (check the system tray).
-2. Pick a front end:
-   - **Console**: right-click `anydesk-reset.bat` and run as **Administrator**, or run the PowerShell script directly:
-     ```powershell
-     # Run as Administrator
-     powershell -ExecutionPolicy Bypass -File anydesk-reset.ps1
-     ```
-   - **GUI**: right-click `anydesk-reset-gui.bat` and run as **Administrator**, or run the PowerShell script directly:
-     ```powershell
-     # Run as Administrator
-     powershell -ExecutionPolicy Bypass -File anydesk-reset-gui.ps1
-     ```
+2. Double-click **`AnyDesk Reset.bat`** and accept the UAC prompt — this opens the GUI and is the recommended way to run it.
+   - Prefer a console/scriptable flow instead? Run **`AnyDesk Reset (Console).bat`** and accept the UAC prompt.
 3. Follow the prompts (console) or click the buttons (GUI) to back up, reset, or restore your AnyDesk config.
 4. Relaunch AnyDesk — a new ID will be assigned.
+
+> **Note:** A Full Reset preserves your address book (and any locally-set unattended-access password), but it does **not** preserve your AnyDesk account login session. A fresh ID invalidates the old session's auth token on AnyDesk's relay servers no matter what's backed up locally, so you'll need to re-enter your AnyDesk account password to log back in after a reset.
 
 ## Project Structure
 
 ```
 anydesk-reset/
-|-- anydesk-reset.bat        # Console entry point launcher
-|-- anydesk-reset.ps1        # Console front end
-|-- anydesk-reset-gui.bat    # GUI entry point launcher
-|-- anydesk-reset-gui.ps1    # WinForms GUI front end
-`-- AnyDeskReset.Core.psm1   # Shared backup/reset/restore logic used by both front ends
+|-- AnyDesk Reset.bat             # Run this - GUI entry point (recommended)
+|-- AnyDesk Reset (Console).bat   # Console entry point, for scripting/no-GUI use
+`-- scripts/
+    |-- anydesk-reset-gui.ps1     # WinForms GUI front end
+    |-- anydesk-reset.ps1         # Console front end
+    `-- AnyDeskReset.Core.psm1    # Shared backup/reset/restore logic used by both front ends
 ```
 
 ## Status
