@@ -91,9 +91,8 @@ Versioning follows `MAJOR.MINOR` based on commit significance — major for core
 
 This project is dual licensed.
 
-**Community Edition** — [GNU Affero General Public License v3 (AGPLv3)](https://github.com/TheBooleanJulian/thebooleanjulian.github.io/blob/main/LICENSE). Free to use, modify, and self-host. If you distribute a modified version or run it as a network service, you must make the corresponding source available.
-
-**Commercial License** — for organisations that want to embed, modify, or distribute this software without AGPLv3's obligations. See [COMMERCIAL-LICENSE.md](https://github.com/TheBooleanJulian/thebooleanjulian.github.io/blob/main/COMMERCIAL-LICENSE.md).
+- Community Edition — [GNU Affero General Public License v3 (AGPLv3)](LICENSE). Free to use, modify, and self-host. If you distribute a modified version or run it as a network service, you must make the corresponding source available.
+- Commercial License — for organisations that want to embed, modify, or distribute this software without AGPLv3's obligations. See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
 
 ---
 
