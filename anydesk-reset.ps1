@@ -5,31 +5,16 @@ param()
 $Host.UI.RawUI.WindowTitle = "AnyDesk Reset"
 $ErrorActionPreference = 'Stop'
 
+Import-Module (Join-Path $PSScriptRoot 'AnyDeskReset.Core.psm1') -Force
+
 # ---- Self-elevate ---------------------------------------------------------
-$principal = New-Object Security.Principal.WindowsPrincipal ([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+if (-not (Test-IsAdmin)) {
     Write-Host "Administrator rights required - relaunching elevated..." -ForegroundColor Yellow
     Start-Process powershell -Verb RunAs -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`""
     )
     exit
 }
-
-# ---- Paths ------------------------------------------------------------------
-$ProgramDataDir = "C:\ProgramData\AnyDesk"
-$RoamingDir     = Join-Path $env:APPDATA "AnyDesk"
-$UserConfPath   = Join-Path $RoamingDir "user.conf"
-$ServiceConfPath = Join-Path $ProgramDataDir "service.conf"
-$SystemConfPath  = Join-Path $ProgramDataDir "system.conf"
-
-# Keys that represent "your data" (address book) - safe to restore.
-# Note: session auth tokens (ad.anynet.auth_tokens) are NOT restorable - they're
-# bound to the old device identity by AnyDesk's relay servers, so a fresh ID
-# invalidates them server-side no matter what gets written locally.
-$AddressKeys  = @('ad.roster.items', 'ad.roster.favorites')
-# Any key matching this is treated as a saved password/credential hash - safe to restore
-# because password checks are self-contained and not tied to the device identity.
-$PasswordKeyPattern = 'password|pass_hash|protection_hash'
 
 # ---- UI helpers -------------------------------------------------------------
 function Write-Banner {
@@ -78,44 +63,6 @@ function Invoke-Step {
     }
 }
 
-function Get-ConfHashtable {
-    param([string]$Path)
-    $table = @{}
-    if (Test-Path $Path) {
-        foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
-            $idx = $line.IndexOf('=')
-            if ($idx -gt 0) {
-                $table[$line.Substring(0, $idx)] = $line.Substring($idx + 1)
-            }
-        }
-    }
-    return $table
-}
-
-function Set-ConfValues {
-    param([string]$Path, [hashtable]$Values)
-    if (-not (Test-Path $Path) -or $Values.Count -eq 0) { return }
-    $lines = New-Object System.Collections.Generic.List[string]
-    $lines.AddRange([string[]][System.IO.File]::ReadAllLines($Path))
-    foreach ($key in $Values.Keys) {
-        $newLine = "$key=$($Values[$key])"
-        $matchIndex = -1
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i].StartsWith("$key=")) { $matchIndex = $i; break }
-        }
-        if ($matchIndex -ge 0) { $lines[$matchIndex] = $newLine } else { $lines.Add($newLine) }
-    }
-    [System.IO.File]::WriteAllLines($Path, $lines, (New-Object System.Text.UTF8Encoding($false)))
-}
-
-function Get-AnyDeskExe {
-    $candidates = @(
-        "C:\Program Files (x86)\AnyDesk\AnyDesk.exe",
-        "C:\Program Files\AnyDesk\AnyDesk.exe"
-    )
-    return $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-}
-
 # ---- Banner + confirmation -------------------------------------------------
 Write-Banner
 
@@ -140,9 +87,7 @@ $TotalSteps = 7
 
 # ---- Step 1: Close AnyDesk ---------------------------------------------------
 Invoke-Step -Number 1 -Total $TotalSteps -Text "Closing AnyDesk..." -Action {
-    $proc = Get-Process -Name AnyDesk -ErrorAction SilentlyContinue
-    if ($proc) {
-        $proc | Stop-Process -Force
+    if (Stop-AnyDeskProcess -SettleMilliseconds 0) {
         Show-Wait -Seconds 2 -Message "waiting for process to release files"
         "Process stopped"
     } else {
@@ -151,30 +96,16 @@ Invoke-Step -Number 1 -Total $TotalSteps -Text "Closing AnyDesk..." -Action {
 }
 
 # ---- Step 2: Back up addresses & passwords -----------------------------------
-$backup = @{ UserConf = @{}; ServiceConf = @{}; SystemConf = @{} }
-$backupDir = $null
+$backupResult = $null
 
 Write-Host ("[2/{0}] " -f $TotalSteps) -ForegroundColor DarkCyan -NoNewline
 Write-Host "Backing up address book... " -ForegroundColor White -NoNewline
 try {
-    $backup.UserConf    = Get-ConfHashtable -Path $UserConfPath
-    $backup.ServiceConf = Get-ConfHashtable -Path $ServiceConfPath
-    $backup.SystemConf  = Get-ConfHashtable -Path $SystemConfPath
-
-    $found = @()
-    if ($backup.UserConf['ad.roster.items'] -and $backup.UserConf['ad.roster.items'] -notmatch '^,*$') {
-        $found += "address book"
-    }
-    $pwKeys = @($backup.ServiceConf.Keys) + @($backup.SystemConf.Keys) | Where-Object { $_ -match $PasswordKeyPattern }
-    if ($pwKeys) { $found += "unattended-access password" }
-
-    $backupDir = Join-Path $PSScriptRoot ("backup\{0}" -f (Get-Date -Format 'yyyy-MM-dd_HHmmss'))
-    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-    $backup | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $backupDir 'backup.json') -Encoding UTF8
+    $backupResult = Backup-AnyDeskConfig -BackupRoot (Join-Path $PSScriptRoot 'backup')
 
     Write-Host "OK" -ForegroundColor Green
-    if ($found.Count -gt 0) {
-        Write-Host ("        Found: {0}" -f ($found -join ', ')) -ForegroundColor DarkGray
+    if ($backupResult.Found.Count -gt 0) {
+        Write-Host ("        Found: {0}" -f ($backupResult.Found -join ', ')) -ForegroundColor DarkGray
     } else {
         Write-Host "        Nothing to preserve (no saved addresses or passwords found)" -ForegroundColor DarkGray
     }
@@ -182,22 +113,24 @@ try {
     Write-Host "FAILED" -ForegroundColor Red
     Write-Host "        $($_.Exception.Message)" -ForegroundColor Red
 }
+$backup = $backupResult.Backup
+$backupDir = $backupResult.BackupDir
+$paths = Get-AnyDeskPaths
 
-# ---- Step 3: Delete ProgramData\AnyDesk --------------------------------------
+# ---- Step 3+4: Delete ProgramData\AnyDesk and Roaming\AnyDesk ----------------
 Invoke-Step -Number 3 -Total $TotalSteps -Text "Deleting ProgramData\AnyDesk..." -Action {
-    if (Test-Path $ProgramDataDir) {
-        Remove-Item $ProgramDataDir -Recurse -Force
-        "Removed $ProgramDataDir"
+    if (Test-Path $paths.ProgramDataDir) {
+        Remove-Item $paths.ProgramDataDir -Recurse -Force
+        "Removed $($paths.ProgramDataDir)"
     } else {
         "Not found, skipped"
     }
 }
 
-# ---- Step 4: Delete Roaming\AnyDesk ------------------------------------------
 Invoke-Step -Number 4 -Total $TotalSteps -Text "Deleting Roaming AnyDesk..." -Action {
-    if (Test-Path $RoamingDir) {
-        Remove-Item $RoamingDir -Recurse -Force
-        "Removed $RoamingDir"
+    if (Test-Path $paths.RoamingDir) {
+        Remove-Item $paths.RoamingDir -Recurse -Force
+        "Removed $($paths.RoamingDir)"
     } else {
         "Not found, skipped"
     }
@@ -218,27 +151,13 @@ if (-not $anyDeskExe) {
 Write-Host ("[5/{0}] " -f $TotalSteps) -ForegroundColor DarkCyan -NoNewline
 Write-Host "Generating new AnyDesk identity... " -ForegroundColor White
 
-Start-Process $anyDeskExe
-
-$deadline = (Get-Date).AddSeconds(25)
-$ready = $false
-while ((Get-Date) -lt $deadline) {
+$idResult = Start-AnyDeskAndWaitForId -AnyDeskExe $anyDeskExe -TimeoutSeconds 25 -OnTick {
     Show-Wait -Seconds 1 -Message "waiting for AnyDesk to register a new ID"
-    if ((Test-Path $UserConfPath) -and (Test-Path $SystemConfPath)) {
-        $sysConf = Get-ConfHashtable -Path $SystemConfPath
-        if ($sysConf['ad.anynet.id']) { $ready = $true; break }
-    }
 }
 
-$proc = Get-Process -Name AnyDesk -ErrorAction SilentlyContinue
-if ($proc) {
-    $proc | Stop-Process -Force
-    Show-Wait -Seconds 2 -Message "waiting for process to release files"
-}
-
-if ($ready) {
+if ($idResult.Ready) {
     Write-Host "OK" -ForegroundColor Green
-    Write-Host "        New ID: $($sysConf['ad.anynet.id'])" -ForegroundColor DarkGray
+    Write-Host "        New ID: $($idResult.Id)" -ForegroundColor DarkGray
 } else {
     Write-Host "TIMED OUT" -ForegroundColor Yellow
     Write-Host "        Continuing anyway - restore step may have nothing to write into." -ForegroundColor Yellow
@@ -249,42 +168,18 @@ Write-Host ("[6/{0}] " -f $TotalSteps) -ForegroundColor DarkCyan -NoNewline
 Write-Host "Restoring address book... " -ForegroundColor White -NoNewline
 
 try {
-    $restored = @()
-
-    if (Test-Path $UserConfPath) {
-        $values = @{}
-        foreach ($key in $AddressKeys) {
-            if ($backup.UserConf.ContainsKey($key)) { $values[$key] = $backup.UserConf[$key] }
-        }
-        if ($values.Count -gt 0) {
-            Set-ConfValues -Path $UserConfPath -Values $values
-            $restored += "address book"
-        }
-    } else {
+    if (-not (Test-Path $paths.UserConfPath)) {
         Write-Host ""
         Write-Host "        AnyDesk hadn't finished initializing; address book not restored." -ForegroundColor Yellow
         if ($backupDir) { Write-Host "        Your backup is safe at: $backupDir" -ForegroundColor Yellow }
-    }
-
-    # Only restore keys that look like password/credential hashes - never identity fields
-    # (ad.anynet.cert / pkey / id / fpr, ad.inst.id, license data) which must stay fresh.
-    $pwValues = @{}
-    foreach ($src in @($backup.ServiceConf, $backup.SystemConf)) {
-        foreach ($key in $src.Keys) {
-            if ($key -match $PasswordKeyPattern) { $pwValues[$key] = $src[$key] }
-        }
-    }
-    if ($pwValues.Count -gt 0) {
-        if (Test-Path $ServiceConfPath) { Set-ConfValues -Path $ServiceConfPath -Values $pwValues }
-        if (Test-Path $SystemConfPath)  { Set-ConfValues -Path $SystemConfPath -Values $pwValues }
-        $restored += "unattended-access password"
-    }
-
-    Write-Host "OK" -ForegroundColor Green
-    if ($restored.Count -gt 0) {
-        Write-Host ("        Restored: {0}" -f ($restored -join ', ')) -ForegroundColor Green
     } else {
-        Write-Host "        Nothing to restore" -ForegroundColor DarkGray
+        $restored = Restore-AnyDeskConfig -Backup $backup
+        Write-Host "OK" -ForegroundColor Green
+        if ($restored.Count -gt 0) {
+            Write-Host ("        Restored: {0}" -f ($restored -join ', ')) -ForegroundColor Green
+        } else {
+            Write-Host "        Nothing to restore" -ForegroundColor DarkGray
+        }
     }
 } catch {
     Write-Host "FAILED" -ForegroundColor Red
