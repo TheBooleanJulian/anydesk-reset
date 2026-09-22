@@ -5,7 +5,7 @@
 **Reset your AnyDesk ID cleanly — a Windows utility with backup/restore support.**
 
 ![PowerShell](https://img.shields.io/badge/-PowerShell-5391FE?logo=powershell&logoColor=white)
-![License](https://img.shields.io/badge/license-AGPLv3%20%7C%20Commercial-00D4C8.svg)
+![License](https://img.shields.io/badge/license-AGPLv3%20%2B%20Commercial-00D4C8.svg)
 
 ![anydesk-reset](assets/hero.png)
 
@@ -25,6 +25,10 @@ AnyDesk ties its client identity to locally stored configuration files. This uti
 - Console flow — run the batch file, follow the prompts
 - Optional lightweight GUI — buttons for Full Reset / Backup Only / Restore Selected, with a live log
 - Works on Windows with no external dependencies
+
+## Screenshots
+
+![anydesk-reset GUI](assets/hero2.png)
 
 ## Tech Stack
 
